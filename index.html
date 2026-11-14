@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Интерактивная шкала истории Православной Церкви</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+  :root {
+    --bg-dark: #1a1410;
+    --bg-panel: #241c16;
+    --gold: #c9a961;
+    --gold-bright: #e6c878;
+    --red: #8b2635;
+    --text: #e8dcc4;
+    --text-dim: #a89878;
+    --border: #3a2e24;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background: var(--bg-dark);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ===== ЛЕВАЯ ПАНЕЛЬ — ДЕРЕВО ===== */
+  #sidebar {
+    width: 320px;
+    background: var(--bg-panel);
+    border-right: 2px solid var(--gold);
+    padding: 20px 15px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  #sidebar h2 {
+    color: var(--gold-bright);
+    font-size: 18px;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 1px;
+  }
+
+  .tree-epoch {
+    margin-bottom: 12px;
+  }
+
+  .tree-epoch-title {
+    color: var(--gold);
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 8px 10px;
+    background: rgba(201, 169, 97, 0.08);
+    border-left: 3px solid var(--gold);
+    border-radius: 2px;
+    transition: all 0.2s;
+    user-select: none;
+  }
+
+  .tree-epoch-title:hover {
+    background: rgba(201, 169, 97, 0.18);
+    color: var(--gold-bright);
+  }
+
+  .tree-epoch-title::before {
+    content: "☦ ";
+    color: var(--red);
+  }
+
+  .tree-events {
+    list-style: none;
+    padding-left: 15px;
+    margin-top: 5px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+  }
+
+  .tree-events.open {
+    max-height: 2000px;
+  }
+
+  .tree-event {
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-left: 1px dashed var(--border);
+    transition: all 0.2s;
+  }
+
+  .tree-event:hover {
+    color: var(--gold-bright);
+    border-left-color: var(--gold);
+    padding-left: 15px;
+  }
+
+  .tree-event.active {
+    color: var(--gold-bright);
+    background: rgba(139, 38, 53, 0.2);
+    border-left-color: var(--red);
+  }
+
+  /* ===== ЦЕНТРАЛЬНАЯ ПАНЕЛЬ — ТАЙМЛАЙН ===== */
+  #main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px 60px;
+    position: relative;
+  }
+
+  #main h1 {
+    color: var(--gold-bright);
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+  }
+
+  #main .subtitle {
+    text-align: center;
+    color: var(--text-dim);
+    font-style: italic;
+    margin-bottom: 50px;
+    font-size: 14px;
+  }
+
+  .timeline {
+    position: relative;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 0;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, var(--gold), var(--gold), transparent);
+    transform: translateX(-50%);
+  }
+
+  .epoch-marker {
+    position: relative;
+    text-align: center;
+    margin: 60px 0 30px 0;
+    z-index: 2;
+  }
+
+  .epoch-node {
+    display: inline-block;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--red), #5a1820);
+    border: 3px solid var(--gold-bright);
+    box-shadow: 0 0 20px rgba(201, 169, 97, 0.5), inset 0 0 15px rgba(0,0,0,0.4);
+    color: var(--gold-bright);
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 70px;
+    text-align: center;
+    position: relative;
+    z-index: 3;
+  }
+
+  .epoch-node::before {
+    content: "✦";
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--gold-bright);
+    font-size: 16px;
+  }
+
+  .epoch-title {
+    display: block;
+    margin-top: 15px;
+    color: var(--gold-bright);
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+
+  .epoch-period {
+    display: block;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-style: italic;
+    margin-top: 3px;
+  }
+
+  /* События */
+  .event {
+    position: relative;
+    width: 50%;
+    padding: 15px 40px;
+    margin-bottom: 20px;
+  }
+
+  .event.left {
+    left: 0;
+    text-align: right;
+  }
+
+  .event.right {
+    left: 50%;
+    text-align: left;
+  }
+
+  .event-node {
+    position: absolute;
+    top: 20px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: 2px solid var(--bg-dark);
+    cursor: pointer;
+    transition: all 0.3s;
+    z-index: 2;
+  }
+
+  .event.left .event-node {
+    right: -9px;
+  }
+
+  .event.right .event-node {
+    left: -9px;
+  }
+
+  .event-node:hover {
+    transform: scale(1.5);
+    background: var(--gold-bright);
+    box-shadow: 0 0 15px var(--gold-bright);
+  }
+
+  .event-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .event-card:hover {
+    border-color: var(--gold);
+    box-shadow: 0 4px 15px rgba(201, 169, 97, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .event-year {
+    color: var(--red);
+    font-weight: bold;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .event-title {
+    color: var(--gold-bright);
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 3px;
+  }
+
+  .event-hint {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  /* ===== МОДАЛЬНОЕ ОКНО ===== */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .modal {
+    background: var(--bg-panel);
+    border: 2px solid var(--gold);
+    border-radius: 6px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 30px;
+    position: relative;
+    box-shadow: 0 0 40px rgba(201, 169, 97, 0.3);
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 10px; right: 15px;
+    background: none;
+    border: none;
+    color: var(--gold);
+    font-size: 28px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  .modal-close:hover { color: var(--red); }
+
+  .modal h2 {
+    color: var(--gold-bright);
+    font-size: 22px;
+    margin-bottom: 5px;
+    padding-right: 30px;
+  }
+
+  .modal .modal-year {
+    color: var(--red);
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+  }
+
+  .modal .modal-location {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 13px;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal .modal-description {
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.7;
+    margin-bottom: 20px;
+    text-align: justify;
+  }
+
+  .modal .sources {
+    background: rgba(0,0,0,0.3);
+    padding: 12px 15px;
+    border-left: 3px solid var(--gold);
+    border-radius: 3px;
+    margin-bottom: 15px;
+  }
+
+  .modal .sources h4 {
+    color: var(--gold);
+    font-size: 13px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .modal .sources a {
+    display: block;
+    color: var(--text-dim);
+    font-size: 13px;
+    text-decoration: none;
+    padding: 3px 0;
+    transition: color 0.2s;
+  }
+
+  .modal .sources a:hover {
+    color: var(--gold-bright);
+    text-decoration: underline;
+  }
+
+  .map-btn {
+    display: inline-block;
+    background: var(--red);
+    color: var(--gold-bright);
+    border: 1px solid var(--gold);
+    padding: 8px 18px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    transition: all 0.2s;
+    margin-top: 5px;
+  }
+
+  .map-btn:hover {
+    background: var(--gold);
+    color: var(--bg-dark);
+  }
+
+  #modal-map {
+    width: 100%;
+    height: 350px;
+    margin-top: 15px;
+    border: 1px solid var(--gold);
+    border-radius: 3px;
+    display: none;
+  }
+
+  /* Схема богослужения */
+  .service-scheme {
+    background: rgba(0,0,0,0.3);
+    padding: 20px;
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    margin: 20px 0;
+  }
+
+  .service-scheme h4 {
+    color: var(--gold-bright);
+    font-size: 16px;
+    margin-bottom: 15px;
+    text-align: center;
+  }
+
+  .scheme-item {
+    padding: 10px 15px;
+    margin: 8px 0;
+    background: rgba(201, 169, 97, 0.1);
+    border-left: 3px solid var(--gold);
+    border-radius: 2px;
+  }
+
+  .scheme-item.main {
+    background: rgba(139, 38, 53, 0.2);
+    border-left-color: var(--red);
+    font-weight: bold;
+  }
+
+  .scheme-item.optional {
+    background: rgba(201, 169, 97, 0.05);
+    border-left-color: var(--text-dim);
+    font-style: italic;
+  }
+
+  .scheme-note {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 3px;
+    line-height: 1.6;
+  }
+
+  /* Скроллбар */
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg-dark); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+  @media (max-width: 768px) {
+    #sidebar { width: 100%; height: auto; max-height: 40vh; }
+    body { flex-direction: column; }
+    .event { width: 100%; left: 0 !important; text-align: left !important; padding-left: 50px; padding-right: 15px; }
+    .event .event-node { left: -9px !important; right: auto !important; }
+    .timeline::before { left: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ЛЕВАЯ ПАНЕЛЬ -->
+<aside id="sidebar">
+  <h2>☦ СОДЕРЖАНИЕ</h2>
+  <div id="tree"></div>
+</aside>
+
+<!-- ЦЕНТРАЛЬНАЯ ПАНЕЛЬ -->
+<main id="main">
+  <h1>ИСТОРИЯ ПРАВОСЛАВНОЙ ЦЕРКВИ</h1>
+  <p class="subtitle">Интерактивная шкала событий от Пятидесятницы до наших дней</p>
+  <div class="timeline" id="timeline"></div>
+</main>
+
+<!-- МОДАЛЬНОЕ ОКНО -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2 id="modal-title"></h2>
+    <div class="modal-year" id="modal-year"></div>
+    <div class="modal-location" id="modal-location"></div>
+    <div class="modal-description" id="modal-description"></div>
+    <div id="modal-extra"></div>
+    <div class="sources" id="modal-sources"></div>
+    <button class="map-btn" id="map-toggle" onclick="toggleMap()">📍 Показать на карте</button>
+    <div id="modal-map"></div>
+  </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// ============================================================
+// ДАННЫЕ: Эпохи и события
+// ============================================================
+
+const DATA = [
+  {
+    id: "epoch_1",
+    is_epoch: true,
+    title: "Апостольский век и Церковь древности",
+    period: "33–313 гг.",
+    events: [
+      {
+        id: "e1_1",
+        year: 33,
+        title: "Сошествие Святого Духа на апостолов (Пятидесятница)",
+        coords: { lat: 31.7683, lng: 35.2137 },
+        location: "Иерусалим",
+        description: "В день иудейского праздника Пятидесятницы, на пятьдесят первый день после Воскресения Христова, на апостолов, собранных вместе с Пресвятой Богородицей в Сионской горнице, сошел Святой Дух в виде огненных языков. Это событие считается днём рождения новозаветной Церкви — апостолы получили благодать для проповеди Евангелия всем народам (Деян. 2:1–41).",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Пятидесятница». Т. 57", url: "https://pravenc.ru/" },
+          { title: "Азбука веры. Толкование на Деяния святых апостолов свт. Иоанна Златоуста", url: "https://azbyka.ru/otechnik/Ioann_Zlatoust/tolkovye_na_deyanija_apostolov/" }
+        ]
+      },
+      {
+        id: "e1_2",
+        year: 49,
+        title: "Апостольский собор в Иерусалиме",
+        coords: { lat: 31.7683, lng: 35.2137 },
+        location: "Иерусалим",
+        description: "Первый в истории Церкви Собор апостолов и пресвитеров, рассмотревший вопрос об обязательности соблюдения ветхозаветного закона для новообращённых язычников. Собор постановил не возлагать на язычников бремени Моисеева закона, установив лишь необходимые правила воздержания (Деян. 15). Стал прообразом будущих Вселенских Соборов.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Апостольский собор»", url: "https://pravenc.ru/" },
+          { title: "Древо. Апостольский собор ок. 51 г.", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e1_3",
+        year: 313,
+        title: "Миланский эдикт императора Константина",
+        coords: { lat: 45.4642, lng: 9.1900 },
+        location: "Медиолан (совр. Милан, Италия)",
+        description: "Императоры Константин Великий и Лициний издали эдикт, провозгласивший религиозную терпимость в Римской империи и вернувший христианам конфискованное имущество. Это положило конец эпохе гонений и открыло путь к свободному развитию Церкви.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Миланский эдикт 313 года»", url: "https://pravenc.ru/" },
+          { title: "Азбука веры. История Церкви. Эпоха Константина Великого", url: "https://azbyka.ru/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_2",
+    is_epoch: true,
+    title: "Эпоха Вселенских Соборов",
+    period: "IV–VIII вв.",
+    events: [
+      {
+        id: "e2_1",
+        year: 325,
+        title: "I Вселенский Собор (Никея)",
+        coords: { lat: 40.1905, lng: 29.0533 },
+        location: "Никея, Вифиния (совр. Изник, Турция)",
+        description: "Собор 318 святых отцов, созванный императором Константином. Осудил арианскую ересь, утвердив единосущие (ὁμοούσιος) Сына Божия Отцу, составил первую часть Символа веры и установил 20 канонов церковного устройства. Заложил догматический фундамент православного богословия.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Первый Вселенский Собор»", url: "https://pravenc.ru/" },
+          { title: "Древо. I Вселенский Собор. 325 г.", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e2_2",
+        year: 381,
+        title: "II Вселенский Собор (Константинополь)",
+        coords: { lat: 41.0082, lng: 28.9784 },
+        location: "Константинополь",
+        description: "Собор 150 отцов, осудивший ересь Македония, отвергавшего Божество Святого Духа. Дополнил Никейский Символ веры членами о Святом Духе — «Господа Животворящего...», который и поныне читается за каждой Божественной литургией.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Второй Вселенский Собор»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e2_3",
+        year: 431,
+        title: "III Вселенский Собор (Эфес)",
+        coords: { lat: 37.9394, lng: 27.3417 },
+        location: "Эфес, Малая Азия",
+        description: "Собор 200 отцов осудил несторианскую ересь и утвердил почитание Пресвятой Богородицы как Богородицы (Θεοτόκος), а не просто Христородицы. Подтвердил неизменность Никео-Константинопольского Символа веры.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Третий Вселенский Собор»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e2_4",
+        year: 451,
+        title: "IV Вселенский Собор (Халкидон)",
+        coords: { lat: 40.9833, lng: 29.0167 },
+        location: "Халкидон, Вифиния",
+        description: "Собор 630 отцов осудил монофизитскую ересь Евтихия и утвердил догмат о двух естествах во Христе — Божеском и Человеческом, «неслиянно, нераздельно, неразлучно, неизменно» (определение св. Льва Великого). Составлен Символ веры в окончательной редакции.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Четвертый Вселенский Собор»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e2_5",
+        year: 787,
+        title: "VII Вселенский Собор (Никея)",
+        coords: { lat: 40.1905, lng: 29.0533 },
+        location: "Никея, Вифиния",
+        description: "Собор 350 отцов, созванный при императрице Ирине и патриархе Тарасии. Осудил иконоборческую ересь и утвердил догмат о почитании (προσκύνησις) святых икон, различив почитание и единое Богоподобное поклонение (λατρεία). Завершил эпоху Вселенских Соборов.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Седьмой Вселенский Собор»", url: "https://pravenc.ru/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_3",
+    is_epoch: true,
+    title: "Средневековая Церковь",
+    period: "IX–XV вв.",
+    events: [
+      {
+        id: "e3_1",
+        year: 843,
+        title: "Торжество Православия",
+        coords: { lat: 41.0082, lng: 28.9784 },
+        location: "Константинополь, храм Святой Софии",
+        description: "В первое воскресенье Великого поста 843 года при императрице Феодоре и патриархе Мефодии I в храме Святой Софии было восстановлено почитание святых икон, окончательно побеждена иконоборческая ересь. С тех пор в первое воскресенье Великого поста Православная Церковь совершает чин Торжества Православия.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Торжество Православия»", url: "https://pravenc.ru/" },
+          { title: "Азбука веры. Чин Торжества Православия", url: "https://azbyka.ru/" }
+        ]
+      },
+      {
+        id: "e3_2",
+        year: 863,
+        title: "Начало славянской миссии свв. Кирилла и Мефодия",
+        coords: { lat: 41.7225, lng: 23.3875 },
+        location: "Великая Моравия",
+        description: "Святые равноапостольные братья Кирилл (Константин) и Мефодий, посланные Константинопольским патриархом Фотием, начали проповедь Евангелия среди славян, создали славянскую азбуку (глаголицу) и перевели богослужебные книги, положив начало славянской письменности и литургической традиции.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Кирилл и Мефодий»", url: "https://pravenc.ru/" },
+          { title: "Древо. Святые равноапостольные Кирилл и Мефодий", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e3_3",
+        year: 1054,
+        title: "Великая схизма — разделение Церквей",
+        coords: { lat: 41.0082, lng: 28.9784 },
+        location: "Константинополь / Рим",
+        description: "Взаимное отлучение (анафематствование) папского легата кардинала Гумберта и Константинопольского патриарха Михаила Кирулария. Окончательное разделение единой Церкви на западную (католическую) и восточную (православную), вызванное догматическими (филиокве), каноническими и культурными различиями.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Великая схизма»", url: "https://pravenc.ru/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_4",
+    is_epoch: true,
+    title: "Развитие богослужения",
+    period: "IV–XV вв.",
+    events: [
+      {
+        id: "e4_1",
+        year: 380,
+        title: "Формирование Иерусалимского богослужебного устава",
+        coords: { lat: 31.7683, lng: 35.2137 },
+        location: "Иерусалим",
+        description: "В IV веке в Иерусалиме складывается строй богослужения, основанный на памяти о евангельских событиях и почитании святых мест. Паломница Эгерия описывает в своих записках суточный круг служб Иерусалимской Церкви, который лег в основу будущего Типикона.",
+        hasScheme: true,
+        schemeType: "vespers",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Типикон»", url: "https://pravenc.ru/" },
+          { title: "Азбука веры. Богослужебный Устав. История формирования", url: "https://azbyka.ru/bogosluzhenie/" }
+        ]
+      },
+      {
+        id: "e4_2",
+        year: 500,
+        title: "Творения святителя Василия Великого и Иоанна Златоуста",
+        coords: { lat: 38.4237, lng: 27.1428 },
+        location: "Кесария Каппадокийская / Антиохия",
+        description: "Святители Василий Великий и Иоанн Златоуст составили чинопоследования Божественной литургии, которые поныне совершаются в Православной Церкви. Литургия Иоанна Златоуста — повседневная, Литургия Василия Великого — совершается 10 раз в году.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Литургия»", url: "https://pravenc.ru/" },
+          { title: "Древо. Литургия святителя Иоанна Златоуста", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e4_3",
+        year: 700,
+        title: "Создание Иерусалимского Типикона прп. Саввой Освященным",
+        coords: { lat: 31.7300, lng: 35.3300 },
+        location: "Лавра прп. Саввы Освященного, Иудейская пустыня",
+        description: "Преподобный Савва Освященный составил первый монастырский устав (Типикон), соединивший Иерусалимскую и Студийскую традиции. Этот устав лег в основу богослужебной практики Православной Церкви и поныне определяет порядок совершения суточного круга богослужений.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Савва Освященный»", url: "https://pravenc.ru/" },
+          { title: "Православная энциклопедия. Статья «Типикон»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e4_4",
+        year: 1350,
+        title: "Окончательная редакция Служебника и Типикона",
+        coords: { lat: 41.0082, lng: 28.9784 },
+        location: "Константинополь",
+        description: "В XIV веке при патриархе Филофее Коккине происходит окончательная редакция богослужебных книг. Устанавливается современный вид Служебника, Типикона и Часослова, которые поныне используются в Православной Церкви без существенных изменений.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Типикон»", url: "https://pravenc.ru/" },
+          { title: "Азбука веры. Богослужебные книги Православной Церкви", url: "https://azbyka.ru/bogosluzhenie/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_5",
+    is_epoch: true,
+    title: "Крещение Руси и домонгольский период",
+    period: "988–1237 гг.",
+    events: [
+      {
+        id: "e5_1",
+        year: 988,
+        title: "Крещение Руси святым князем Владимиром",
+        coords: { lat: 50.4501, lng: 30.5234 },
+        location: "Киев, воды Днепра; Корсунь (Херсонес)",
+        description: "Великий князь Киевский Владимир Святославич, приняв Святое Крещение в Корсуни (Херсонесе), по возвращении в Киев крестил своих сыновей и киевлян в водах Днепра. Это событие стало началом системной христианизации русских земель и определило духовный путь русского народа на тысячелетие вперёд.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Крещение Руси»", url: "https://pravenc.ru/" },
+          { title: "Православная энциклопедия. Статья «Владимир Святославич»", url: "https://pravenc.ru/" },
+          { title: "Древо. Крещение Руси. 988 г.", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e5_2",
+        year: 1051,
+        title: "Основание Киево-Печерской обители",
+        coords: { lat: 50.4348, lng: 30.5578 },
+        location: "Киев, Ближние пещеры",
+        description: "Преподобный Антоний Печерский, вернувшись со Святой Горы Афон, поселился в пещере близ села Берестово. Вскоре к нему начали стекаться ученики, среди которых был преподобный Феодосий, установивший общежительный Студийский устав. Так возникла Киево-Печерская Лавра — колыбель русского монашества.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Киево-Печерская Лавра»", url: "https://pravenc.ru/" },
+          { title: "Древо. Киево-Печерская Лавра", url: "https://drevo-info.ru/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_6",
+    is_epoch: true,
+    title: "Монгольское иго и возвышение Москвы",
+    period: "XIII–XV вв.",
+    events: [
+      {
+        id: "e6_1",
+        year: 1299,
+        title: "Перенесение митрополичьей кафедры из Киева во Владимир",
+        coords: { lat: 56.1290, lng: 40.4070 },
+        location: "Владимир",
+        description: "Митрополит Киевский и всея Руси Максим, вследствие разорения Киева монголами, переносит свою резиденцию во Владимир-на-Клязьме. Киев формально остаётся кафедральным городом, но фактическим центром Русской Церкви становится северо-восточная Русь.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Максим, митрополит Киевский и всея Руси»", url: "https://pravenc.ru/" },
+          { title: "Карташёв А.В. Очерки по истории Русской Церкви. Т. 1", url: "https://wco.ru/biblio/" }
+        ]
+      },
+      {
+        id: "e6_2",
+        year: 1326,
+        title: "Перенесение митрополичьей кафедры в Москву",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва, Успенский собор Кремля",
+        description: "Митрополит Петр, ученик преподобного Сергия Радонежского (в духовном смысле), по приглашению князя Иоанна Калиты переносит кафедру из Владимира в Москву. В 1326 году закладывается первый каменный Успенский собор в Московском Кремле. Москва становится духовным центром Руси.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Петр, митрополит Киевский и всея Руси»", url: "https://pravenc.ru/" },
+          { title: "Древо. Митрополит Петр", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e6_3",
+        year: 1380,
+        title: "Благословение преподобного Сергия на Куликовскую битву",
+        coords: { lat: 53.6417, lng: 38.6667 },
+        location: "Куликово поле; Троице-Сергиева лавра",
+        description: "Преподобный Сергий Радонежский, игумен земли Русской, благословил великого князя Димитрия Иоанновича и послал с ним в войско двух иноков-богатырей — Пересвета и Ослябю. Победа на Куликовом поле 8 сентября 1380 года стала началом освобождения Руси от ордынского ига, совершённого с молитвенной помощью Пресвятой Богородицы.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Сергий Радонежский»", url: "https://pravenc.ru/" },
+          { title: "Древо. Куликовская битва. 1380 г.", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e6_4",
+        year: 1448,
+        title: "Автономия Русской Церкви (избрание митрополита Ионы)",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва",
+        description: "После Ферраро-Флорентийской унии 1439 года, принятой Константинопольским патриархом, русские архиереи на Соборе 1448 года избрали митрополитом Киевским и всея Руси епископа Рязанского Иону без утверждения в Константинополе. Это ознаменовало фактическую автокефалию Русской Православной Церкви.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Иона, митрополит Киевский и всея Руси»", url: "https://pravenc.ru/" },
+          { title: "Карташёв А.В. Очерки по истории Русской Церкви. Т. 1", url: "https://wco.ru/biblio/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_7",
+    is_epoch: true,
+    title: "Патриарший период",
+    period: "1589–1700 гг.",
+    events: [
+      {
+        id: "e7_1",
+        year: 1589,
+        title: "Учреждение Патриаршества в Москве",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва, Успенский собор Кремля",
+        description: "На Соборе при участии Константинопольского патриарха Иеремии II митрополит Московский Иов был возведён в сан Патриарха Московского и всея Руси. Русская Церковь стала пятым в диптихе Патриархатом после Константинополя, Александрии, Антиохии и Иерусалима.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Иов, первый Патриарх Московский и всея Руси»", url: "https://pravenc.ru/" },
+          { title: "Православная энциклопедия. Статья «Московское патриархатство»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e7_2",
+        year: 1666,
+        title: "Большой Московский Собор и раскол (старообрядчество)",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва",
+        description: "Собор 1666–1667 годов утвердил исправление богослужебных книг по греческим образцам, проведённое патриархом Никоном, и анафематствовал противников реформ — протопопа Аввакума и иных. Это привело к трагическому расколу Русской Церкви, последствия которого преодолеваются и поныне.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Большой Московский собор 1666–1667 гг.»", url: "https://pravenc.ru/" },
+          { title: "Карташёв А.В. Очерки по истории Русской Церкви. Т. 2", url: "https://wco.ru/biblio/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_8",
+    is_epoch: true,
+    title: "Синодальный период",
+    period: "1700–1917 гг.",
+    events: [
+      {
+        id: "e8_1",
+        year: 1721,
+        title: "Учреждение Святейшего Правительствующего Синода",
+        coords: { lat: 59.9343, lng: 30.3063 },
+        location: "Санкт-Петербург",
+        description: "По «Духовному регламенту» императора Петра I после кончины патриарха Адриана (1700) и упразднения патриаршества был учреждён Святейший Синод — коллегиальный орган церковного управления во главе со светским обер-прокурором. Церковь оказалась в состоянии государственного подчинения.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Святейший Правительствующий Синод»", url: "https://pravenc.ru/" },
+          { title: "Древо. Синодальный период", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e8_2",
+        year: 1903,
+        title: "Прославление преподобного Серафима Саровского",
+        coords: { lat: 54.9103, lng: 43.3322 },
+        location: "Саров, Нижегородская губерния",
+        description: "Торжественное обретение мощей и прославление в лике святых великого подвижника Русской Церкви преподобного Серафима Саровского, «дивеевского чудотворца». В торжествах участвовал император Николай II с семьёй. Стало одним из крупнейших духовных событий предреволюционной России.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Серафим Саровский", url: "https://pravenc.ru/" },
+          { title: "Древо. Преподобный Серафим Саровский", url: "https://drevo-info.ru/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_9",
+    is_epoch: true,
+    title: "Советский период",
+    period: "1917–1991 гг.",
+    events: [
+      {
+        id: "e9_1",
+        year: 1917,
+        title: "Поместный Собор. Восстановление Патриаршества",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва, Кремль",
+        description: "Поместный Собор 1917–1918 годов, проходивший в условиях революции, восстановил Патриаршество. 5 (18) ноября 1917 года, после Божественной литургии в Успенском соборе, митрополит Московский Тихон (Беллавин) был избран Патриархом. Собор также принял ряд важных определений о церковном устройстве.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Поместный Собор 1917–1918 гг.»", url: "https://pravenc.ru/" },
+          { title: "Православная энциклопедия. Статья «Тихон, Патриарх Московский и всея Руси»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e9_2",
+        year: 1943,
+        title: "Встреча И.В. Сталина с иерархами. Избрание Патриарха Сергия",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва",
+        description: "В ночь с 4 на 5 сентября 1943 года И.В. Сталин принял в Кремле митрополитов Сергия (Страгородского), Алексия (Симанского) и Николая (Ярушевича). 8 сентября на Архиерейском Соборе митрополит Сергий был избран Патриархом Московского и всея Руси. Разрешено было открытие духовных школ и издание «Журнала Московской Патриархии».",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Сергий (Страгородский), Патриарх Московский и всея Руси»", url: "https://pravenc.ru/" },
+          { title: "Древо. Встреча Сталина с иерархами. Сентябрь 1943 г.", url: "https://drevo-info.ru/" }
+        ]
+      },
+      {
+        id: "e9_3",
+        year: 1988,
+        title: "Торжество 1000-летия Крещения Руси",
+        coords: { lat: 55.7516, lng: 37.6175 },
+        location: "Москва; Данилов монастырь",
+        description: "Поместный Собор Русской Православной Церкви, посвящённый 1000-летию Крещения Руси. Торжества проходили в условиях «горбачёвской перестройки» и ознаменовали начало коренного изменения отношения советского государства к Церкви. Началось массовое возвращение храмов, открытие монастырей, духовных учебных заведений.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Торжество 1000-летия Крещения Руси»", url: "https://pravenc.ru/" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "epoch_10",
+    is_epoch: true,
+    title: "Новейший период",
+    period: "с 1991 г.",
+    events: [
+      {
+        id: "e10_1",
+        year: 2000,
+        title: "Юбилейный Архиерейский Собор. Прославление новомучеников",
+        coords: { lat: 55.7447, lng: 37.6056 },
+        location: "Москва, Храм Христа Спасителя",
+        description: "Архиерейский Собор принял «Основы социальной концепции Русской Православной Церкви», прославил в лике святых царственную семью — императора Николая II и его близких — а также сонм новомучеников и исповедников Церкви Русской XX века (более 800 имён). Принят «Акт о каноническом общении» с РПЦЗ как первый шаг к восстановлению единства.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Юбилейный Архиерейский Собор 2000 г.»", url: "https://pravenc.ru/" },
+          { title: "Официальный сайт Московского Патриархии. Основы социальной концепции РПЦ", url: "https://patriarchia.ru/" }
+        ]
+      },
+      {
+        id: "e10_2",
+        year: 2007,
+        title: "Восстановление евхаристического общения с РПЦЗ",
+        coords: { lat: 55.7447, lng: 37.6056 },
+        location: "Москва, Храм Христа Спасителя",
+        description: "17 мая 2007 года, в праздник Вознесения Господня, в Храме Христа Спасителя Патриарх Московский и всея Руси Алексий II и Первоиерарх Русской Зарубежной Церкви митрополит Лавр подписали Акт о каноническом общении, евхаристическом единении и продолжении сотрудничества. Впервые за 80 лет была совершена совместная Божественная литургия.",
+        sources: [
+          { title: "Официальный сайт Московского Патриархии. Акт о каноническом общении", url: "https://patriarchia.ru/" },
+          { title: "Православная энциклопедия. Статья «Русская Православная Церковь Заграницей»", url: "https://pravenc.ru/" }
+        ]
+      },
+      {
+        id: "e10_3",
+        year: 2009,
+        title: "Избрание Патриарха Кирилла",
+        coords: { lat: 55.7447, lng: 37.6056 },
+        location: "Москва, Храм Христа Спасителя",
+        description: "6 февраля 2009 года Поместный Собор Русской Православной Церкви избрал митрополита Смоленского и Калининградского Кирилла (Гундяева) Патриархом Московского и всея Руси. 1 февраля состоялась интронизация в Храме Христа Спасителя.",
+        sources: [
+          { title: "Православная энциклопедия. Статья «Кирилл, Патриарх Московский и всея Руси»", url: "https://pravenc.ru/" },
+          { title: "Официальный сайт Патриарха Московского и всея Руси", url: "https://patriarchia.ru/" }
+        ]
+      }
+    ]
+  }
+];
+
+// ============================================================
+// РЕНДЕРИНГ
+// ============================================================
+
+const timeline = document.getElementById('timeline');
+const tree = document.getElementById('tree');
+
+// Рендер таймлайна
+function renderTimeline() {
+  let html = '';
+  let side = 'left';
+  DATA.forEach(epoch => {
+    html += `
+      <div class="epoch-marker" id="epoch-${epoch.id}">
+        <div class="epoch-node">☦</div>
+        <span class="epoch-title">${epoch.title}</span>
+        <span class="epoch-period">${epoch.period}</span>
+      </div>
+    `;
+    epoch.events.forEach(ev => {
+      html += `
+        <div class="event ${side}" id="event-${ev.id}">
+          <div class="event-node" onclick="openModal('${ev.id}')"></div>
+          <div class="event-card" onclick="openModal('${ev.id}')">
+            <div class="event-year">${ev.year} г.</div>
+            <div class="event-title">${ev.title}</div>
+            <div class="event-hint">→ подробности</div>
+          </div>
+        </div>
+      `;
+      side = side === 'left' ? 'right' : 'left';
+    });
+  });
+  timeline.innerHTML = html;
+}
+
+// Рендер дерева
+function renderTree() {
+  let html = '';
+  DATA.forEach(epoch => {
+    html += `<div class="tree-epoch">`;
+    html += `<div class="tree-epoch-title" onclick="toggleEpoch(this, '${epoch.id}')">${epoch.title} <small style="color:var(--text-dim);font-weight:normal;">(${epoch.period})</small></div>`;
+    html += `<ul class="tree-events" id="tree-epoch-${epoch.id}">`;
+    epoch.events.forEach(ev => {
+      html += `<li class="tree-event" onclick="scrollToEvent('${ev.id}')">${ev.year} — ${ev.title}</li>`;
+    });
+    html += `</ul></div>`;
+  });
+  tree.innerHTML = html;
+}
+
+function toggleEpoch(el, epochId) {
+  const list = document.getElementById('tree-epoch-' + epochId);
+  list.classList.toggle('open');
+  const epochEl = document.getElementById('epoch-' + epochId);
+  if (epochEl) epochEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function scrollToEvent(eventId) {
+  const el = document.getElementById('event-' + eventId);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.querySelectorAll('.tree-event').forEach(e => e.classList.remove('active'));
+    const treeItems = document.querySelectorAll('.tree-event');
+    treeItems.forEach(item => {
+      if (item.getAttribute('onclick').includes(eventId)) {
+        item.classList.add('active');
+      }
+    });
+  }
+  openModal(eventId);
+}
+
+// ============================================================
+// МОДАЛЬНОЕ ОКНО И КАРТА
+// ============================================================
+
+let leafletMap = null;
+let currentEvent = null;
+
+function findEvent(id) {
+  for (const epoch of DATA) {
+    for (const ev of epoch.events) {
+      if (ev.id === id) return ev;
+    }
+  }
+  return null;
+}
+
+function renderServiceScheme() {
+  return `
+    <div class="service-scheme">
+      <h4>☦ Структура Всенощного бдения</h4>
+      <div class="scheme-item optional">
+        <strong>Малая вечерня</strong> (подготовительная, служится днём накануне воскресных и великих праздников)
+      </div>
+      <div class="scheme-item main">
+        <strong>Великая вечерня</strong> (основная часть Всенощной)
+        <div style="font-size: 12px; margin-top: 5px; font-weight: normal; color: var(--text-dim);">
+          — «Благословен Бог наш...»<br>
+          — Псалом 103 (предначинательный)<br>
+          — Великая ектения<br>
+          — «Господи, воззвах» со стихирами<br>
+          — Вход с кадилом (если есть)<br>
+          — «Свете тихий»<br>
+          — Паремии (если праздник)<br>
+          — Лития (если бдение)<br>
+          — Стихиры на стиховне<br>
+          — «Ныне отпущаеши» (если есть)<br>
+          — Трисвятое, «Отче наш», тропари
+        </div>
+      </div>
+      <div class="scheme-item main">
+        <strong>Утреня</strong>
+        <div style="font-size: 12px; margin-top: 5px; font-weight: normal; color: var(--text-dim);">
+          — Шестопсалмие<br>
+          — Великая ектения<br>
+          — «Бог Господь» с тропарями<br>
+          — Кафизмы (1-я и 2-я, если есть)<br>
+          — Малая ектения, седален<br>
+          — Полиелей (если праздник)<br>
+          — Величание (если есть)<br>
+          — Канон (или два)<br>
+          — «Честнейшую» (если нет полиелея)<br>
+          — Малая ектения<br>
+          — Стихиры на «Хвалите»<br>
+          — Великое славословие<br>
+          — Отпуст
+        </div>
+      </div>
+      <div class="scheme-item main">
+        <strong>Первый час</strong>
+      </div>
+      <div class="scheme-note">
+        <strong>Примечание о Великом повечерии:</strong><br>
+        Великое повечерие НЕ входит в обычное воскресное Всенощное бдение. Оно заменяет вечерню или присоединяется к ней только в особые периоды: в дни Великого поста (с молитвой св. Ефрема Сирина), в сочельники Рождества и Крещения, а также в некоторых монастырских традициях накануне особо чтимых праздников.
+      </div>
+    </div>
+  `;
+}
+
+function openModal(id) {
+  const ev = findEvent(id);
+  if (!ev) return;
+  currentEvent = ev;
+
+  document.getElementById('modal-title').textContent = ev.title;
+  document.getElementById('modal-year').textContent = ev.year + ' г.';
+  document.getElementById('modal-location').textContent = '📍 ' + ev.location;
+  document.getElementById('modal-description').textContent = ev.description;
+
+  // Схема богослужения
+  const extraDiv = document.getElementById('modal-extra');
+  if (ev.hasScheme && ev.schemeType === "vespers") {
+    extraDiv.innerHTML = renderServiceScheme();
+  } else {
+    extraDiv.innerHTML = '';
+  }
+
+  const sourcesDiv = document.getElementById('modal-sources');
+  let srcHtml = '<h4>Источники:</h4>';
+  ev.sources.forEach(s => {
+    srcHtml += `<a href="${s.url}" target="_blank">• ${s.title}</a>`;
+  });
+  sourcesDiv.innerHTML = srcHtml;
+
+  // Сброс карты
+  document.getElementById('modal-map').style.display = 'none';
+  document.getElementById('map-toggle').textContent = '📍 Показать на карте';
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+  }
+
+  document.getElementById('modal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+  }
+}
+
+function toggleMap() {
+  const mapDiv = document.getElementById('modal-map');
+  const btn = document.getElementById('map-toggle');
+  if (mapDiv.style.display === 'none' || mapDiv.style.display === '') {
+    mapDiv.style.display = 'block';
+    btn.textContent = '🗺️ Скрыть карту';
+    setTimeout(() => {
+      if (!leafletMap) {
+        leafletMap = L.map('modal-map').setView([currentEvent.coords.lat, currentEvent.coords.lng], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap',
+          maxZoom: 18
+        }).addTo(leafletMap);
+        L.marker([currentEvent.coords.lat, currentEvent.coords.lng])
+          .addTo(leafletMap)
+          .bindPopup(`<b>${currentEvent.year} г.</b><br>${currentEvent.title}<br><i>${currentEvent.location}</i>`)
+          .openPopup();
+      }
+      leafletMap.invalidateSize();
+    }, 100);
+  } else {
+    mapDiv.style.display = 'none';
+    btn.textContent = '📍 Показать на карте';
+  }
+}
+
+// Закрытие модалки по клику вне её
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+// Закрытие по Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// Инициализация
+renderTimeline();
+renderTree();
+</script>
+
+</body>
+</html>
